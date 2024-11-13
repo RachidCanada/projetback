@@ -44,6 +44,21 @@ public class ControllerUser {
 		return serviceUser.inscriptionEmployeur(req);
 	}
 	
+	// Demande de réinitialisation de mot de passe
+	@PostMapping("/motdepasse/demande-reinitialisation")
+	public ResponseEntity<Map<String, String>> demandeReinitialisation(@RequestParam String email) {
+	    return serviceUser.demandeReinitialisationMotDePasse(email);
+	}
+
+	// Réinitialisation du mot de passe
+	@PostMapping("/motdepasse/reinitialisation")
+	public ResponseEntity<Map<String, String>> reinitialisationMotDePasse(
+	        @RequestParam String token, 
+	        @RequestParam String nouveauMotDePasse) {
+	    return serviceUser.reinitialisationMotDePasse(token, nouveauMotDePasse);
+	}
+
+	
 	
 	@PostMapping("/connexion")
 	public ResponseEntity<Map<String, String>> connect(@RequestParam String email, @RequestParam String mdp){

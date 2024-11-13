@@ -1,5 +1,7 @@
 package com.stagora.services;
 
+import java.util.UUID;
+
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
@@ -30,23 +32,23 @@ public class ServiceUser {
 
     @Autowired
     private DaoUser daoUser;
-    
+
     @Autowired
     private DaoEtudiant daoEtudiant;
-    
+
     @Autowired
     private DaoEtablissement daoEtablissement;
-    
+
     @Autowired
     private DaoEmployeur daoEmployeur;
-    
+
     @Autowired
     private DaoConnexion daoConnexion;
 
     public ResponseEntity<Map<String, String>> inscriptionEtudiant(RequestInscriptionEtudiant req) {
         User user = req.getUser();
         this.verifDisponibiliteEmail(user);
-        
+
         Etudiant etudiant = req.getEtudiant();
         Optional<Etablissement> etablissement = daoEtablissement.findById(req.getId_etablissement());
 
@@ -56,40 +58,36 @@ public class ServiceUser {
 
         user.setTypeCompte(TypeCompte.ETUDIANT);
         daoUser.save(user);
-        
+
         etudiant.setUser(user);
         etudiant.setEtablissement(etablissement.get());
-        daoEtudiant.save(etudiant);        
-        
+        daoEtudiant.save(etudiant);
+
         return ResponseEntity.status(HttpStatus.CREATED).body(this.reponse("Inscription réussie"));
     }
 
     public ResponseEntity<Map<String, String>> inscriptionEmployeur(RequestInscriptionEmployeur req) {
         User user = req.getUser();
         this.verifDisponibiliteEmail(user);
-        
+
         Employeur employeur = req.getEmployeur();
         user.setTypeCompte(TypeCompte.EMPLOYEUR);
         daoUser.save(user);
-        
+
         employeur.setUser(user);
         employeur.getSites().forEach(site -> site.setEmployeur(employeur));
 
         daoEmployeur.save(employeur);
-        
+
         return ResponseEntity.status(HttpStatus.CREATED).body(this.reponse("Inscription réussie"));
     }
 
     public ResponseEntity<Map<String, String>> connection(String email, String mdp) {
-        User user = daoUser.findUserByEmail(email);
+        User user = daoUser.findByEmail(email);
 
         if (user == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND).body(this.reponse("Utilisateur non trouvé"));
         }
-
-       /* if (!user.isConfirme()) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(this.reponse("Email non confirmé"));      
-        }*/
 
         if (this.verifMotdPasse(user, mdp)) {
             Connexion connexion = daoConnexion.findConnexionByUserId(user.getId());
@@ -98,7 +96,7 @@ public class ServiceUser {
             } else {
                 connexion = new Connexion();
             }
-            connexion.setDate_connexion(LocalDateTime.now());
+            connexion.setDateConnexion(LocalDateTime.now());
             connexion.setUser(user);
             daoConnexion.save(connexion);
 
@@ -108,14 +106,54 @@ public class ServiceUser {
         }
     }
 
+    public ResponseEntity<Map<String, String>> demandeReinitialisationMotDePasse(String email) {
+        User user = daoUser.findByEmail(email);
+        if (user == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(this.reponse("Utilisateur non trouvé"));
+        }
+
+        // Génération d'un token aléatoire pour la réinitialisation
+        String token = UUID.randomUUID().toString();
+
+        Connexion connexion = daoConnexion.findConnexionByUserId(user.getId());
+        if (connexion == null) {
+            connexion = new Connexion();
+            connexion.setUser(user);
+        }
+        connexion.setTokenResetPassword(token);
+        connexion.setDateConnexion(LocalDateTime.now());
+        daoConnexion.save(connexion);
+
+        // Simule l'envoi de l'email
+        System.out.println("Lien de réinitialisation : http://localhost:8080/user/motdepasse/reinitialisation?token=" + token);
+
+        return ResponseEntity.status(HttpStatus.OK).body(this.reponse("Email de réinitialisation envoyé"));
+    }
+
+    public ResponseEntity<Map<String, String>> reinitialisationMotDePasse(String token, String nouveauMotDePasse) {
+        Connexion connexion = daoConnexion.findByTokenResetPassword(token);
+        if (connexion == null || connexion.getDateConnexion().plusHours(1).isBefore(LocalDateTime.now())) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(this.reponse("Token invalide ou expiré"));
+        }
+
+        User user = connexion.getUser();
+        user.setMot_de_passe(nouveauMotDePasse);
+        daoUser.save(user);
+
+        connexion.setTokenResetPassword(null); // Invalidation du token
+        daoConnexion.save(connexion);
+
+        return ResponseEntity.status(HttpStatus.OK).body(this.reponse("Mot de passe réinitialisé avec succès"));
+    }
+
     private void verifDisponibiliteEmail(User user) {
-        if (daoUser.findUserByEmail(user.getEmail()) != null) {
+        if (daoUser.findByEmail(user.getEmail()) != null) {
             throw new EmailNonDisponibleException("Email non disponible");
         }
     }
 
     private boolean verifMotdPasse(User user, String mdp) {
-        return user.getMot_de_passe().equals(mdp); // Remplacez par BCrypt si vous le souhaitez
+        return user.getMot_de_passe().equals(mdp);
     }
 
     private Map<String, String> reponse(String message) {

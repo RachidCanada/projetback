@@ -12,4 +12,8 @@ public interface DaoUser extends JpaRepository<User, Long>{
 	@Query("select u from User u where u.email like :x")   // Attendiont 'User' doit être identique au nom de l'entité et non la table
 	public User findUserByEmail(@Param("x")String email);
 	
+	@Query("SELECT u FROM User u WHERE u.email = :email")
+	User findByEmail(@Param("email") String email);
+
+	
 }
